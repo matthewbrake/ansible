@@ -1,0 +1,93 @@
+---
+- name: Install Basic System Utilities
+  hosts: all
+  become: yes
+  tasks:
+    - name: Update package cache
+      apk:
+        update_cache: yes
+
+    - name: Install Essential Utilities
+      apk:
+        name:
+          - git
+          - nano
+          - wget
+          - curl
+          - build-base   # equivalent to build-essential on Alpine
+          - busybox
+          - iptables
+          - iptables-nft
+          - ufw
+          - gparted
+          - parted
+          - ntfs-3g
+        state: present
+      tags: utilities
+
+    - name: Install File Sharing Utilities
+      apk:
+        name:
+          - samba
+          - nfs-utils    # equivalent to nfs-common on Alpine
+        state: present
+      tags: file_sharing
+
+    - name: Install Security Utilities
+      apk:
+        name:
+          - openssl
+          - openssh-client
+          - ca-certificates
+        state: present
+      tags: security
+
+    - name: Install Development Tools
+      apk:
+        name:
+          - vim
+          - tree
+          - htop
+          - zip
+          - unzip
+          - nano
+          - git
+          - net-tools
+          - bind-tools   # equivalent to dnsutils on Alpine
+          - iproute2
+          - tcpdump
+          - rsync
+          - lsof
+          - strace       # equivalent to gdb on Alpine
+        state: present
+      tags: development
+
+    - name: Install Python and Java
+      apk:
+        name:
+          - python3
+          - py3-pip
+          - py3-venv
+          - perl
+          - openjdk11
+        state: present
+      tags: python_java
+
+    - name: Install System Monitoring Utilities
+      apk:
+        name:
+          - preload
+          - zram
+          - gnome-disk-utility   # equivalent to gnome-disk-utility on Alpine
+        state: present
+      tags: system_monitoring
+
+    - name: Install Network Utilities
+      apk:
+        name:
+          - net-tools
+          - iftop
+          - unattended-upgrades
+          - networkmanager
+        state: present
+      tags: network
