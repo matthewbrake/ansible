@@ -1,0 +1,110 @@
+
+update
+apk add
+  docker add
+docker boot
+ssh add key
+  user add /add sudoers/dokcer 
+  
+  
+
+YAML
+---
+- name: Alpine Linux Base Setup
+  hosts: alpine_servers
+  become: yes
+  vars:
+    new_user: your_username     # Replace with the desired username
+    new_user_password: your_password  # Replace with the desired password
+    new_user_groups:           # Specify additional groups (space-separated)
+      - wheel
+      - docker
+    hostname: your_hostname    # Replace with the desired hostname
+    ssh_public_key: "ssh-rsa AAAAB3Nza... your_email@example.com"  # Replace with your public key
+
+  tasks:
+    # User Management
+    - name: Create new user
+      user:
+        name: "{{ new_user }}"
+        password: "{{ new_user_password | password_hash('sha512') }}"
+        groups: "{{ new_user_groups | join(',') }}"
+        append: yes
+        state: present
+
+    - name: Add SSH key for new user (if ssh_public_key is defined)
+      authorized_key:
+        user: "{{ new_user }}"
+        key: "{{ ssh_public_key }}"
+        state: present
+      when: ssh_public_key is defined
+
+    # Hostname and Networking
+    - name: Set hostname
+      hostname:
+        name: "{{ hostname }}"
+
+    - name: Update /etc/hosts
+      lineinfile:
+        path: /etc/hosts
+        regexp: '^127\.0\.0\.1\s+'
+        line: '127.0.0.1   localhost {{ hostname }}'
+
+    # Package Installation
+    - name: Install essential utilities
+      apk:
+        name:
+          - alpine-base
+          - build-base
+          - alpine-sdk
+          - sudo
+          - openntpd
+          - bash
+          - ... (rest of your package list in separate lines)
+
+    # Docker Installation (Official Way)
+    - name: Add Docker GPG key
+      apk:
+        name:
+          - gnupg
+        state: present
+
+    - name: Add Docker repository
+      # (Replace 'edge' with 'stable' or 'test' as needed)
+      get_url:
+        url: https://download.docker.com/linux/alpine/gpg
+        dest: /etc/apk/keys/docker-cli.rsa.pub
+
+    - name: Add Docker repository to sources list
+      # (Replace 'v3.10' with the desired version)
+      lineinfile:
+        path: /etc/apk/repositories
+        line: "https://download.docker.com/linux/alpine/v3.10/edge"
+        state: present
+
+    - name: Install Docker
+      apk:
+        name:
+          - docker
+          - docker-compose
+
+    - name: Start Docker service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add the new user to the docker group
+      user:
+        name: "{{ new_user }}"
+        groups: docker
+        append: yes
+  
+    # VM Tools (Customize if needed)
+    # Example:
+    - name: Install open-vm-tools 
+      apk:
+        name: open-vm-tools
+
+    # Network Interface Configuration (If needed)
+    # ... (Add tasks to configure network interfaces, static IPs, etc.
