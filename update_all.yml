@@ -1,0 +1,64 @@
+---
+- name: Comprehensive System Maintenance Playbook
+  hosts: all
+  become: yes
+  become_method: sudo
+  become_user: root
+
+  tasks:
+    - name: Update and upgrade system for Debian-based systems
+      apt:
+        update_cache: yes
+        upgrade: full
+        autoremove: yes
+        autoclean: yes
+        install_recommends: yes
+      register: apt_result
+      when: "'debian' in group_names"
+
+    - name: Fix broken packages for Debian-based systems
+      command: apt --fix-broken install
+      register: fix_broken
+      changed_when: "'0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.' not in fix_broken.stdout"
+      when: apt_result.changed and "'debian' in group_names"
+
+    - name: Clean apt cache and configure packages for Debian-based systems
+      shell: |
+        apt-get clean
+        dpkg --configure -a
+      changed_when: false
+      when: "'debian' in group_names"
+
+    - name: Update and upgrade system for Alpine-based systems
+      apk:
+        update_cache: yes
+        upgrade: yes
+        no_cache: yes
+      register: apk_result
+      when: "'alpine' in group_names"
+
+    - name: Clean apk cache for Alpine-based systems
+      command: apk cache clean
+      changed_when: false
+      when: "'alpine' in group_names"
+
+    - name: Check if reboot is required for Debian-based systems
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+      when: "'debian' in group_names"
+
+    - name: Check if reboot is required for Alpine-based systems
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_required_apk
+      when: "'alpine' in group_names"
+
+  handlers:
+    - name: Reboot system for Debian-based systems
+      reboot:
+      when: reboot_required.stat.exists or apt_result.changed or fix_broken.changed
+
+    - name: Reboot system for Alpine-based systems
+      reboot:
+      when: reboot_required_apk.stat.exists or apk_result.changed
