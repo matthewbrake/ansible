@@ -46,3 +46,10 @@
         owner: "{{ username }}"
         group: "{{ username }}"
         mode: '0600'  # Set the permissions to 600
+
+    - name: Allow ansible user to run sudo without a password
+      lineinfile:
+        path: /etc/sudoers
+        line: "{{ username }} ALL=(ALL) NOPASSWD: ALL"
+        validate: '/usr/sbin/visudo -cf %s'  # Validate the sudoers file syntax
+      when: user_check is not defined  # Only add if the user was created
