@@ -1,0 +1,13 @@
+- name: Install core packages
+  hosts: debian
+  become: yes
+  become_method: sudo
+  become_user: root
+
+  tasks:
+    - name: Install core packages
+      ansible.builtin.apt:
+        name:
+          - prometheus-node-exporter
+          - nfs-common
+        update_cache: true
