@@ -9,13 +9,21 @@
     ssh_dir: "/home/{{ username }}/.ssh"  # Define the SSH directory path
 
   tasks:
-    - name: Create the Ansible user
+    - name: Check if the user already exists
+      getent:
+        database: passwd
+        key: "{{ username }}"
+      register: user_check
+      ignore_errors: yes  # Ignore errors if the user does not exist
+
+    - name: Create the Ansible user if it does not exist
       user:
         name: "{{ username }}"
         shell: /bin/bash  # Set the user's shell to /bin/bash
         password: "{{ password | password_hash('sha512') }}"  # Hash the password for security
         groups: sudo  # Add the user to the sudo group
         state: present  # Ensure the user is present
+      when: user_check is not defined  # Only create if the user does not exist
 
     - name: Create .ssh directory for the user
       file:
