@@ -2,24 +2,44 @@
 - name: Create Ansible user account and set up SSH access
   hosts: all
   become: yes
+  become_method: sudo
   vars:
     username: ansible
-    password: "{{ 'your_password_here' | password_hash('sha512') }}"
+    group: user
+    password: "password"
     ssh_key: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCVYHN/kEigZtbuFP1L9zc5iWI9dLl5764w7JC9S50KzHiG1PF8V1QDmoY6N1Te5q6TO/fxZ6X94RMGbY/mmQB+2UPie1p4v5LrAElRglGrXzkuWudFtxmirak1WAn0h2dL2K1pVyJsV7Oqbj+vojzTznMYsKOxvInle7mkFWMIfUuJisOXYNHORiynl8Va/ymn0Iv3D2WVfiQeFY//L1ACZpasTv/IFAWbS2cdIdM442kT/XF9Fat3/cCz0yiU2vvJ4MzpMzno7Sdc9zk9CUhsMEx+kgUXQ606Xms2FxtkDlpH8rwg7aip+TFrG5CxE5UZIt3u7YJ41YwGcygcfxEj rsa-key-20240831"
 
   tasks:
-    - name: Ensure group "ansible" exists
-      group:
-        name: "{{ username }}"
-        state: present
+    - name: Ensure we have sudo access
+      command: whoami
+      become: yes
+      changed_when: false
+      register: sudo_check
+      ignore_errors: yes
+
+    - name: Fail if we don't have sudo access
+      fail:
+        msg: "The current user does not have sudo access. Please ensure the user has sudo privileges."
+      when: sudo_check is failed
+
+    - name: Check if user group exists
+      getent:
+        database: group
+        key: "{{ group }}"
+      register: user_group_check
+
+    - name: Fail if user group doesn't exist
+      fail:
+        msg: "The group '{{ group }}' does not exist on the system."
+      when: user_group_check.failed
 
     - name: Create the Ansible user
       user:
         name: "{{ username }}"
-        group: "{{ username }}"
-        groups: sudo
+        group: "{{ group }}"
+        groups: "sudo,root"
         shell: /bin/bash
-        password: "{{ password }}"
+        password: "{{ password | password_hash('sha512') }}"
         update_password: on_create
         state: present
       register: user_creation
@@ -29,7 +49,7 @@
         path: "/home/{{ username }}/.ssh"
         state: directory
         owner: "{{ username }}"
-        group: "{{ username }}"
+        group: "{{ group }}"
         mode: '0700'
       when: user_creation is changed
 
@@ -44,7 +64,7 @@
       file:
         path: "/home/{{ username }}/.ssh/authorized_keys"
         owner: "{{ username }}"
-        group: "{{ username }}"
+        group: "{{ group }}"
         mode: '0600'
       when: ssh_key_addition is changed
 
