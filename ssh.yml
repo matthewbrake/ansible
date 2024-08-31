@@ -1,0 +1,40 @@
+---
+- name: Create Ansible user account
+  hosts: all  # Target all hosts in the inventory
+  become: yes  # Use sudo privileges
+  vars:
+    username: ansible  # Define the username
+    password: "password"  # Define the password (consider using Ansible Vault for sensitive data)
+    ssh_key: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCVYHN/kEigZtbuFP1L9zc5iWI9dLl5764w7JC9S50KzHiG1PF8V1QDmoY6N1Te5q6TO/fxZ6X94RMGbY/mmQB+2UPie1p4v5LrAElRglGrXzkuWudFtxmirak1WAn0h2dL2K1pVyJsV7Oqbj+vojzTznMYsKOxvInle7mkFWMIfUuJisOXYNHORiynl8Va/ymn0Iv3D2WVfiQeFY//L1ACZpasTv/IFAWbS2cdIdM442kT/XF9Fat3/cCz0yiU2vvJ4MzpMzno7Sdc9zk9CUhsMEx+kgUXQ606Xms2FxtkDlpH8rwg7aip+TFrG5CxE5UZIt3u7YJ41YwGcygcfxEj rsa-key-20240831"  # Replace with your actual SSH key
+    ssh_dir: "/home/{{ username }}/.ssh"  # Define the SSH directory path
+
+  tasks:
+    - name: Create the Ansible user
+      user:
+        name: "{{ username }}"
+        shell: /bin/bash  # Set the user's shell to /bin/bash
+        password: "{{ password | password_hash('sha512') }}"  # Hash the password for security
+        groups: sudo  # Add the user to the sudo group
+        state: present  # Ensure the user is present
+
+    - name: Create .ssh directory for the user
+      file:
+        path: "{{ ssh_dir }}"
+        state: directory  # Ensure the directory exists
+        owner: "{{ username }}"  # Set the owner of the directory
+        group: "{{ username }}"  # Set the group of the directory
+        mode: '0700'  # Set the permissions to 700
+
+    - name: Add SSH key for the user
+      authorized_key:
+        user: "{{ username }}"
+        state: present  # Ensure the key is present
+        key: "{{ ssh_key }}"  # Specify the SSH key to add
+        path: "{{ ssh_dir }}/authorized_keys"  # Path to the authorized_keys file
+
+    - name: Ensure the authorized_keys file has correct permissions
+      file:
+        path: "{{ ssh_dir }}/authorized_keys"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: '0600'  # Set the permissions to 600
