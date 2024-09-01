@@ -1,0 +1,34 @@
+---
+- name: Deploy Hello World Docker Container
+  hosts: all
+  become: true
+  become_user: user
+
+  tasks:
+    - name: Create Hello World container
+      community.docker.docker_container:
+        name: hello-world
+        image: "hello-world:latest"
+        state: started
+
+    - name: Wait for container to finish
+      community.docker.docker_container_info:
+        name: hello-world
+      register: result
+      until: result.container.State.Status == "exited"
+      retries: 30
+      delay: 1
+
+    - name: Display container logs
+      command: docker logs hello-world
+      register: container_logs
+      changed_when: false
+
+    - name: Print container logs
+      debug:
+        var: container_logs.stdout_lines
+
+    - name: Remove Hello World container
+      community.docker.docker_container:
+        name: hello-world
+        state: absent
