@@ -1,0 +1,29 @@
+```yaml
+- hosts: all
+  become: yes
+  tasks:
+    - name: Install Mosh
+      apt:
+        name: mosh
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Install Mosh
+      yum:
+        name: mosh
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Open Mosh UDP ports
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+      loop:
+        - "60000"
+        - "60001"
+        - "60002"
+        - "60003"
+        - "60004"
+        - "60005"
+
+```
