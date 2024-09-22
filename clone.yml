@@ -2,6 +2,7 @@
 - name: Mount network share and clone disk
   hosts: all
   become: yes
+  become_user: root
   vars:
     network_share: "//10.0.0.150/HDD/backups"
     mount_point: "/mnt/zima/backups"
@@ -12,24 +13,20 @@
     - name: Get hostname
       command: hostname
       register: hostname_result
+      become: no  # This task doesn't need root privileges
 
     - name: Set hostname and timestamp variables
       set_fact:
         hostname: "{{ hostname_result.stdout }}"
         timestamp: "{{ ansible_date_time.iso8601 | replace(':', '-') }}"
+      become: no  # This task doesn't need root privileges
 
-    - name: Check if mount point directory exists
-      stat:
-        path: "{{ mount_point }}"
-      register: mount_point_stat
-
-    - name: Create mount point directory structure if it doesn't exist
+    - name: Ensure mount point directory structure exists
       file:
         path: "{{ mount_point }}"
         state: directory
         mode: '0755'
         recurse: yes
-      when: not mount_point_stat.stat.exists
 
     - name: Install cifs-utils for mounting CIFS shares
       package:
@@ -60,6 +57,7 @@
     - name: Display dd command output
       debug:
         var: dd_result.stdout_lines
+      become: no  # This task doesn't need root privileges
 
     - name: Unmount network share
       mount:
