@@ -18,16 +18,25 @@
         hostname: "{{ hostname_result.stdout }}"
         timestamp: "{{ ansible_date_time.iso8601 | replace(':', '-') }}"
 
+    - name: Ensure /mnt/zima directory exists
+      file:
+        path: /mnt/zima
+        state: directory
+        mode: '0755'
+      become: yes
+
     - name: Ensure mount point directory exists
       file:
         path: "{{ mount_point }}"
         state: directory
         mode: '0755'
+      become: yes
 
     - name: Install cifs-utils for mounting CIFS shares
       package:
         name: cifs-utils
         state: present
+      become: yes
 
     - name: Mount network share
       mount:
@@ -36,12 +45,14 @@
         fstype: cifs
         opts: "username={{ share_user }},password={{ share_password }},uid=0,gid=0"
         state: mounted
+      become: yes
 
     - name: Ensure images directory exists
       file:
         path: "{{ mount_point }}/images"
         state: directory
         mode: '0755'
+      become: yes
 
     - name: Clone disk using dd
       shell: |
@@ -49,6 +60,7 @@
         gzip -c > "{{ mount_point }}/images/{{ hostname }}_{{ timestamp }}.img.gz"
       register: dd_result
       failed_when: dd_result.rc != 0
+      become: yes
 
     - name: Display dd command output
       debug:
@@ -58,3 +70,4 @@
       mount:
         path: "{{ mount_point }}"
         state: unmounted
+      become: yes
