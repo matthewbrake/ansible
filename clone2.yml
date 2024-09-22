@@ -1,0 +1,116 @@
+---
+- name: Mount network share and clone disk
+  hosts: all
+  become: yes
+  become_user: root
+  vars:
+    network_share: "//10.0.0.150/HDD/backups"
+    mount_point: "/mnt/zima/backups"
+    share_user: "user"
+    share_password: "password"
+
+  tasks:
+    - name: Get hostname
+      command: hostname
+      register: hostname_result
+      become: no
+
+    - name: Set hostname and timestamp variables
+      set_fact:
+        hostname: "{{ hostname_result.stdout }}"
+        timestamp: "{{ ansible_date_time.iso8601 | replace(':', '-') }}"
+      become: no
+
+    - name: Check if mount point is already mounted
+      command: mountpoint -q {{ mount_point }}
+      register: mount_check
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Ensure mount point directory structure exists
+      file:
+        path: "{{ mount_point }}"
+        state: directory
+        mode: '0755'
+        recurse: yes
+      when: mount_check.rc != 0
+
+    - name: Install cifs-utils for mounting CIFS shares
+      package:
+        name: cifs-utils
+        state: present
+      when: mount_check.rc != 0
+
+    - name: Mount network share
+      mount:
+        path: "{{ mount_point }}"
+        src: "{{ network_share }}"
+        fstype: cifs
+        opts: "username={{ share_user }},password={{ share_password }},uid=0,gid=0"
+        state: mounted
+      when: mount_check.rc != 0
+      register: mount_result
+      ignore_errors: yes
+
+    - name: Check mount status
+      fail:
+        msg: "Failed to mount network share"
+      when: mount_check.rc != 0 and mount_result.failed
+
+    - name: Ensure images directory exists
+      file:
+        path: "{{ mount_point }}/images"
+        state: directory
+        mode: '0755'
+
+    - name: Start disk cloning in background
+      shell: |
+        nohup dd if=/dev/sda bs=64K conv=noerror,sync | gzip -c > "{{ mount_point }}/images/{{ hostname }}_{{ timestamp }}.img.gz" 2> /tmp/dd_progress.log &
+        echo $! > /tmp/dd_pid
+      async: 86400  # 24 hours
+      poll: 0
+
+    - name: Check disk cloning progress
+      shell: |
+        if [ -f /tmp/dd_pid ]; then
+          pid=$(cat /tmp/dd_pid)
+          if kill -0 $pid 2>/dev/null; then
+            echo "Cloning in progress"
+            tail -n 1 /tmp/dd_progress.log
+            du -h "{{ mount_point }}/images/{{ hostname }}_{{ timestamp }}.img.gz"
+          else
+            echo "Cloning completed"
+          fi
+        else
+          echo "Cloning not started or PID file missing"
+        fi
+      register: clone_progress
+      until: "'Cloning completed' in clone_progress.stdout"
+      retries: 720  # Check every 2 minutes for 24 hours
+      delay: 120
+      ignore_errors: yes
+
+    - name: Display final cloning status
+      debug:
+        var: clone_progress
+
+    - name: Check if image file was created
+      stat:
+        path: "{{ mount_point }}/images/{{ hostname }}_{{ timestamp }}.img.gz"
+      register: image_file
+
+    - name: Fail if image file was not created or is empty
+      fail:
+        msg: "Image file was not created or is empty"
+      when: not image_file.stat.exists or image_file.stat.size == 0
+
+    - name: Unmount network share
+      mount:
+        path: "{{ mount_point }}"
+        state: unmounted
+      when: mount_check.rc != 0 and not mount_result.failed
+
+    - name: Display final status
+      debug:
+        msg: "Disk cloning completed successfully. Image saved at {{ mount_point }}/images/{{ hostname }}_{{ timestamp }}.img.gz (Size: {{ image_file.stat.size | human_readable }})"
+      when: image_file.stat.exists and image_file.stat.size > 0
