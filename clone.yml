@@ -1,16 +1,23 @@
 ---
 - name: Mount network share and clone disk
-  hosts: localhost
+  hosts: all
   become: yes
   vars:
     network_share: "//10.0.0.150/HDD/backups"
     mount_point: "/mnt/zima/backups"
     share_user: "user"
     share_password: "password"
-    hostname: "{{ ansible_hostname }}"
-    timestamp: "{{ ansible_date_time.iso8601 | replace(':', '-') }}"
 
   tasks:
+    - name: Get hostname
+      command: hostname
+      register: hostname_result
+
+    - name: Set hostname and timestamp variables
+      set_fact:
+        hostname: "{{ hostname_result.stdout }}"
+        timestamp: "{{ ansible_date_time.iso8601 | replace(':', '-') }}"
+
     - name: Ensure mount point directory exists
       file:
         path: "{{ mount_point }}"
@@ -37,7 +44,7 @@
         mode: '0755'
 
     - name: Clone disk using dd
-      command: >
+      shell: |
         dd if=/dev/sda bs=64K conv=noerror,sync status=progress | 
         gzip -c > "{{ mount_point }}/images/{{ hostname }}_{{ timestamp }}.img.gz"
       register: dd_result
