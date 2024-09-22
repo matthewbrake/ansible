@@ -62,35 +62,38 @@
         path: "{{ mount_point }}/images"
         state: directory
         mode: '0755'
-  
     - name: Start disk cloning
       shell: |
-        dd if=/dev/sda bs=64K conv=noerror,sync | gzip -c > "{{ mount_point }}/images/{{ hostname }}_{{ timestamp }}.img.gz" 2> /tmp/dd_progress.log
+        dd if=/dev/sda bs=64K conv=noerror,sync | gzip -c > "{{ mount_point }}/images/{{ hostname }}_{{ timestamp }}.img.gz" 2> /tmp/dd_progress.log &
+        echo $! > /tmp/dd_pid
+      args:
+        executable: /bin/bash
       async: 3600  # 1 hour, adjust as needed
       poll: 0
-      register: dd_task
     
     - name: Check disk cloning progress
-      async_status:
-        jid: "{{ dd_task.ansible_job_id }}"
-      register: job_result
-      until: job_result.finished
+      shell: |
+        if [ -f /tmp/dd_pid ]; then
+          pid=$(cat /tmp/dd_pid)
+          if kill -0 $pid 2>/dev/null; then
+            echo "Cloning in progress"
+            tail -n 1 /tmp/dd_progress.log
+            du -h "{{ mount_point }}/images/{{ hostname }}_{{ timestamp }}.img.gz"
+          else
+            echo "Cloning completed"
+          fi
+        else
+          echo "Cloning not started or PID file missing"
+        fi
+      register: clone_progress
+      until: "'Cloning completed' in clone_progress.stdout"
       retries: 360  # Check every 10 seconds for 1 hour
       delay: 10
     
-    - name: Display dd command output
-      command: cat /tmp/dd_progress.log
-      register: dd_output
-    
-    - name: Show dd output
+    - name: Display cloning progress
       debug:
-        var: dd_output.stdout_lines
-    
-    - name: Check if image file was created
-      stat:
-        path: "{{ mount_point }}/images/{{ hostname }}_{{ timestamp }}.img.gz"
-      register: image_file
-    
-    - name: Display image file info
-      debug:
-        msg: "Image file size: {{ image_file.stat.size | default(0) | human_readable }}"
+        var: clone_progress.stdout_lines
+      when: clone_progress.stdout_lines is defined
+        - name: Display image file info
+          debug:
+            msg: "Image file size: {{ image_file.stat.size | default(0) | human_readable }}"
