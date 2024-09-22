@@ -94,6 +94,3 @@
       debug:
         var: clone_progress.stdout_lines
       when: clone_progress.stdout_lines is defined
-        - name: Display image file info
-          debug:
-            msg: "Image file size: {{ image_file.stat.size | default(0) | human_readable }}"
