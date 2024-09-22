@@ -65,18 +65,32 @@
 
     - name: Clone disk using dd
       shell: |
-        dd if=/dev/sda bs=64K conv=noerror,sync status=progress | 
+        dd if=/dev/sda bs=64K conv=noerror,sync 2>&1 | 
         gzip -c > "{{ mount_point }}/images/{{ hostname }}_{{ timestamp }}.img.gz"
       register: dd_result
       failed_when: dd_result.rc != 0
 
     - name: Display dd command output
       debug:
-        var: dd_result.stdout_lines
-      become: no
+        var: dd_result
+
+    - name: Check if image file was created
+      stat:
+        path: "{{ mount_point }}/images/{{ hostname }}_{{ timestamp }}.img.gz"
+      register: image_file
+
+    - name: Fail if image file was not created or is empty
+      fail:
+        msg: "Image file was not created or is empty"
+      when: not image_file.stat.exists or image_file.stat.size == 0
 
     - name: Unmount network share
       mount:
         path: "{{ mount_point }}"
         state: unmounted
       when: mount_check.rc != 0 and not mount_result.failed
+
+    - name: Display final status
+      debug:
+        msg: "Disk cloning completed successfully. Image saved at {{ mount_point }}/images/{{ hostname }}_{{ timestamp }}.img.gz"
+      when: image_file.stat.exists and image_file.stat.size > 0
