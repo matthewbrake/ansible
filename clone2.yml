@@ -62,55 +62,35 @@
         path: "{{ mount_point }}/images"
         state: directory
         mode: '0755'
-
-    - name: Start disk cloning in background
+  
+    - name: Start disk cloning
       shell: |
-        nohup dd if=/dev/sda bs=64K conv=noerror,sync | gzip -c > "{{ mount_point }}/images/{{ hostname }}_{{ timestamp }}.img.gz" 2> /tmp/dd_progress.log &
-        echo $! > /tmp/dd_pid
-      async: 86400  # 24 hours
+        dd if=/dev/sda bs=64K conv=noerror,sync | gzip -c > "{{ mount_point }}/images/{{ hostname }}_{{ timestamp }}.img.gz" 2> /tmp/dd_progress.log
+      async: 3600  # 1 hour, adjust as needed
       poll: 0
-
+      register: dd_task
+    
     - name: Check disk cloning progress
-      shell: |
-        if [ -f /tmp/dd_pid ]; then
-          pid=$(cat /tmp/dd_pid)
-          if kill -0 $pid 2>/dev/null; then
-            echo "Cloning in progress"
-            tail -n 1 /tmp/dd_progress.log
-            du -h "{{ mount_point }}/images/{{ hostname }}_{{ timestamp }}.img.gz"
-          else
-            echo "Cloning completed"
-          fi
-        else
-          echo "Cloning not started or PID file missing"
-        fi
-      register: clone_progress
-      until: "'Cloning completed' in clone_progress.stdout"
-      retries: 720  # Check every 2 minutes for 24 hours
-      delay: 120
-      ignore_errors: yes
-
-    - name: Display final cloning status
+      async_status:
+        jid: "{{ dd_task.ansible_job_id }}"
+      register: job_result
+      until: job_result.finished
+      retries: 360  # Check every 10 seconds for 1 hour
+      delay: 10
+    
+    - name: Display dd command output
+      command: cat /tmp/dd_progress.log
+      register: dd_output
+    
+    - name: Show dd output
       debug:
-        var: clone_progress
-
+        var: dd_output.stdout_lines
+    
     - name: Check if image file was created
       stat:
         path: "{{ mount_point }}/images/{{ hostname }}_{{ timestamp }}.img.gz"
       register: image_file
-
-    - name: Fail if image file was not created or is empty
-      fail:
-        msg: "Image file was not created or is empty"
-      when: not image_file.stat.exists or image_file.stat.size == 0
-
-    - name: Unmount network share
-      mount:
-        path: "{{ mount_point }}"
-        state: unmounted
-      when: mount_check.rc != 0 and not mount_result.failed
-
-    - name: Display final status
+    
+    - name: Display image file info
       debug:
-        msg: "Disk cloning completed successfully. Image saved at {{ mount_point }}/images/{{ hostname }}_{{ timestamp }}.img.gz (Size: {{ image_file.stat.size | human_readable }})"
-      when: image_file.stat.exists and image_file.stat.size > 0
+        msg: "Image file size: {{ image_file.stat.size | default(0) | human_readable }}"
