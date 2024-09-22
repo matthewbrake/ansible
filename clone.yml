@@ -13,13 +13,19 @@
     - name: Get hostname
       command: hostname
       register: hostname_result
-      become: no  # This task doesn't need root privileges
+      become: no
 
     - name: Set hostname and timestamp variables
       set_fact:
         hostname: "{{ hostname_result.stdout }}"
         timestamp: "{{ ansible_date_time.iso8601 | replace(':', '-') }}"
-      become: no  # This task doesn't need root privileges
+      become: no
+
+    - name: Check if mount point is already mounted
+      command: mountpoint -q {{ mount_point }}
+      register: mount_check
+      ignore_errors: yes
+      changed_when: false
 
     - name: Ensure mount point directory structure exists
       file:
@@ -27,11 +33,13 @@
         state: directory
         mode: '0755'
         recurse: yes
+      when: mount_check.rc != 0
 
     - name: Install cifs-utils for mounting CIFS shares
       package:
         name: cifs-utils
         state: present
+      when: mount_check.rc != 0
 
     - name: Mount network share
       mount:
@@ -40,6 +48,14 @@
         fstype: cifs
         opts: "username={{ share_user }},password={{ share_password }},uid=0,gid=0"
         state: mounted
+      when: mount_check.rc != 0
+      register: mount_result
+      ignore_errors: yes
+
+    - name: Check mount status
+      fail:
+        msg: "Failed to mount network share"
+      when: mount_check.rc != 0 and mount_result.failed
 
     - name: Ensure images directory exists
       file:
@@ -57,9 +73,10 @@
     - name: Display dd command output
       debug:
         var: dd_result.stdout_lines
-      become: no  # This task doesn't need root privileges
+      become: no
 
     - name: Unmount network share
       mount:
         path: "{{ mount_point }}"
         state: unmounted
+      when: mount_check.rc != 0 and not mount_result.failed
